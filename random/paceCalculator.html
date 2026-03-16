@@ -1,0 +1,63 @@
+<!DOCTYPE HTML>
+<html lang="en">
+<head>
+        <link rel="stylesheet" type="text/css" href="css/mystyle.css">
+        <title>
+            Home
+        </title>
+        <meta charset="UTF-8">
+ <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script> 
+    </head>
+    <body>
+<div id="nav-placeholder">
+    </div>
+<script>
+    $.get("begin.html", function(data){
+        $("#nav-placeholder").replaceWith(data);
+    });
+</script>
+    <section>
+            <h2>Race Pace Calculator</h2>
+            <div class="bodyCalc">
+            <h3>Calculate the pace given distance and time wanted to be achieved </h3>
+            <form id="paceCalculator" name="paceCalculator" action="" method="GET">
+                <p><br>
+                Distance:
+                <input type="text" size="5" id="distanceKM" name="distanceKM" value="0"> km
+                <input type="text" size="5" id="distanceM" name="distanceM" value="0"> m
+                <label for="distancePresets"> </label>
+                <select name="distancePresets" id="distancePresets" onchange="updateDistance()" onfocus="this.selectedIndex = -1;">
+                    <option value="default" selected>Choose a preset</option>
+                    <option value="half">Half Marathon (21.1 km)</option>
+                    <option value="full">Marathon (42.2 km)</option>
+                </select>
+                <br>
+                Time:
+                <input type="text" size="5" id="timeH" name="timeH" value="0"> hours
+                <input type="text" id="timeM" size="5" name="timeM" value="0"> mins
+                <input type="text" id="timeS" size="5" name="timeS" value="0"> secs
+                <br>
+                <input type="button" id="calcButton" name="calcButton" value="Calculate">
+                <input type="button" id="resetButton" name="resetButton" value="Reset">
+                <br>
+                Average pace
+                <input type="text" size="2" id="paceM" name="paceM" value="00">:
+                <input type ="text" id="paceS" size="2" name="paceS" value="00"> mins/km
+            </p>
+            </div>
+                <br>
+                <div class="bodyCalc" >
+                <h3>Do you want to use positive/negative splits? Use the following to generate splits for each kilometer</h3>
+                <p>
+                Positive/negative splits <input type="text" size="5" id="split" name="split" value="0"> %
+                <input type="button" name="button" value="Get Splits" onClick="getSplits(this.form)">
+                </p></form>
+            <table id="splitsTable"></table>
+                </div>
+            <script src="built/paceCalculator.js">
+            </script>
+        </section>
+
+
+
+    </body>

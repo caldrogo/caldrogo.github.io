@@ -1,0 +1,103 @@
+<!DOCTYPE HTML>
+<head>
+    <link rel="stylesheet" type="text/css" href="css/mystyle.css">
+    <title>
+        Group theory on Mathematica
+    </title>
+    <script>function myFunction() {
+    document.getElementById("demo").innerHTML = "Paragraph changed.";
+}
+        function toggle(showHideDiv, switchTextDiv,title) {
+    'use strict';
+	var ele = document.getElementById(showHideDiv),
+        text = document.getElementById(switchTextDiv);
+	if (ele.style.display === "block") {
+        ele.style.display = "none";
+		text.innerHTML = title;
+    } else {
+		ele.style.display = "block";
+		text.innerHTML = title;
+	}
+}
+
+    </script>
+</head>
+<main>
+<h1>Some random Mathematica stuff</h1>
+    <section>
+        <h2>Representation theory for finite groups</h2>
+        <button type="button" id="decomposeHead" onclick="toggle('decomposeContent','decomposeHead','Decompose a tensor product of representation in to irreducible representations');">Decompose a tensor product of representation in to irreducible representations</button>
+        <div style="clear:both;"></div>
+        <div id="decomposeContent" style="display: none;">
+        <code>
+getRep[rep_] := Select[characterTable, First[#] == rep &amp;][[1]]
+dim[characterTable_] := Length[characterTable] - 1
+scalarProd[listOfReps_] := (1/Sum[Select[characterTable, First[#] == Dim &amp;][[1, i]], {i, 2,dim[characterTable]+1}])Sum[getRep[Dim[[i]]Product[getRep[listOfReps[[j]]][[i]],{j,Length[listOfReps]}], {i, 2,dim[characterTable] + 1}]
+decomposeTensorList[reps_] := Sum[scalarProd[Join[reps, {characterTable[[i,1]]}]] characterTable[[i, 1]], {i, 2, dim[characterTable] + 1}]
+decomposeTensorProd[tens_] := ToExpression[StringReplace[ToString[decomposeTensorList[Level[tens, 1]]], "+" -> "\[CirclePlus]"]]</code>
+    <p>Define a character table such as the character table for S4,</p>
+        <code>characterTable = {{Dim, 1, 6, 3, 8, 6}, {One, 1, 1, 1, 1, 1}, {OneP,1, -1, 1, 1, -1}, {ThreeOne, 3, 1, -1, 0, -1}, {ThreeTwo, 3, -1,-1,0, 1}, {Two, 2, 0, 2, -1, 0}}</code>
+        
+    <p>Running decomposeTensorProd[
+ ThreeOne\[TensorProduct]ThreeOne\[TensorProduct]ThreeOne], decomposes the tensor product of ThreeOne and ThreeOne into the other irreducible representations.</p>
+    <p>Running decomposeTensorProd[
+ ThreeOne\[TensorProduct]ThreeOne\[TensorProduct]ThreeOne], which is four copies of the representation ThreeOne gives, </p>
+               <code>One\[CirclePlus]OneP\[CirclePlus]4 ThreeOne\[CirclePlus]3 ThreeTwo\[CirclePlus]2 Two</code></div>
+    </section>
+    <section>
+    <h2>Lie Algebra</h2>
+        <button type="button" id="kfHead" onclick="toggle('kfContent','kfeHead','Compute structure constants and Killing form');">Compute structure constants and Killing form</button>
+        <div style="clear:both;"></div>
+        <div id="kfContent" style="display: none;">
+        <code>
+com[a_, b_] := (a.b - b.a)
+f[i_, j_, k_] := (Table[c[a], {a, dim}] /. Solve[com[l[i]/2, l[j]/2] == Sum[I c[b] l[b]/2, {b, dim}], Table[c[d], {d, dim}]][[1]])[[k]]
+g[i_, j_] := 4 Sum[f[i, k, m] f[j, k, m], {k, dim}, {m, dim}]
+        </code>
+        <p>First we have to define a basis for the Lie Algebra. For an example we choose SU(3) and we set the dimension variable dim=8. We can calculate structure constants by using the function f[i,j,k]. Using MatrixForm[Table[g[i, j], {i, dim}, {j, dim}]] we can get the Killing form</p>
+        <code>l[1] = {
+   {0, 1, 0},
+   {1, 0, 0},
+   {0, 0, 0}
+  };
+l[2] = {
+   {0, -I, 0},
+   {I, 0, 0},
+   {0, 0, 0}
+  };
+l[3] = {
+   {1, 0, 0},
+   {0, -1, 0},
+   {0, 0, 0}
+  };
+l[4] = {
+   {0, 0, 1},
+   {0, 0, 0},
+   {1, 0, 0}
+  };
+l[5] = {
+   {0, 0, -I},
+   {0, 0, 0},
+   {I, 0, 0}
+  };
+l[6] = {
+   {0, 0, 0},
+   {0, 0, 1},
+   {0, 1, 0}
+  };
+l[7] = {
+   {0, 0, 0},
+   {0, 0, -I},
+   {0, I, 0}
+  };
+l[8] = 1/Sqrt[3] {
+    {1, 0, 0},
+    {0, 1, 0},
+    {0, 0, -2}
+            };
+        </code></div>
+<p></p>
+    </section>
+
+    <footer><a href="index.html">Back to Home</a></footer>
+</main>

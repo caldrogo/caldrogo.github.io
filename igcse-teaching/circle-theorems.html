@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Circle Theorems Investigation</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for canvas and UI */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1f2937; /* Dark background */
+        }
+        canvas {
+            border: 2px solid #4b5563;
+            background-color: #030712; /* Even darker canvas background */
+            cursor: default;
+            touch-action: none; /* Prevents unwanted scrolling on touch devices */
+        }
+        .info-card {
+            background-color: #374151;
+            border-left: 5px solid #3b82f6;
+        }
+        /* Custom styling for definition text in the info panel */
+        .definition-text {
+            color: #d1d5db; /* Light gray for clarity */
+            font-size: 0.95rem;
+            line-height: 1.4;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#10b981',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="p-4 md:p-8 text-gray-100 min-h-screen">
+
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-extrabold mb-4 text-primary">Circle Theorems Investigation</h1>
+        <p class="text-gray-400 mb-6">We are going to explore properties of circles.</p>
+
+        <!-- Theorem Selector -->
+        <div id="theorem-selector" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <!-- Buttons will be populated by JS -->
+        </div>
+
+        <div class="flex flex-col lg:flex-row gap-6">
+            <!-- Canvas Container -->
+            <div class="lg:w-2/3">
+                <canvas id="geometryCanvas" width="600" height="400" class="w-full h-auto rounded-lg shadow-2xl"></canvas>
+            </div>
+
+            <!-- Info Panel -->
+            <div class="lg:w-1/3">
+                <div class="info-card p-4 rounded-lg shadow-xl">
+                    <h2 id="theorem-title" class="text-xl font-bold mb-2 text-white"></h2>
+                    <p id="theorem-description" class="text-gray-300 text-sm mb-4"></p>
+                    <div id="result-display" class="space-y-3 text-lg font-mono">
+                        <!-- Results will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('geometryCanvas');
+        const ctx = canvas.getContext('2d');
+        const theoremTitle = document.getElementById('theorem-title');
+        const theoremDescription = document.getElementById('theorem-description');
+        const resultDisplay = document.getElementById('result-display');
+        const selector = document.getElementById('theorem-selector');
+
+        // Constants
+        // Using 'var' for globals to prevent redeclaration errors in the execution environment.
+        var R = 150; // Circle Radius
+        var O = { x: 300, y: 200 }; // Circle Center
+        var POINT_RADIUS = 8;
+        var DRAG_THRESHOLD_SQ = 400; // Radius squared for hit testing (Increased from 100 for better hit detection on touch/small targets: 20px radius)
+
+        // Global State
+        var currentTheorem = 0;
+        var points = [];
+        var draggedPoint = null;
+        var isDragging = false;
+
+        // Utility Functions
+        const toRadians = (angle) => angle * (Math.PI / 180);
+        const toDegrees = (angle) => angle * (180 / Math.PI);
+        const formatAngle = (angle) => `${angle.toFixed(1)}${String.fromCharCode(176)}`; // Adds degree symbol
+        const formatLength = (length) => length.toFixed(2);
+
+        // Vector/Geometry Functions
+        const distSq = (p1, p2) => (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2;
+        const normalize = (p) => {
+            const mag = Math.sqrt(p.x * p.x + p.y * p.y);
+            // Handle zero magnitude case to prevent division by zero
+            return mag > 1e-6 ? { x: p.x / mag, y: p.y / mag } : { x: 0, y: 0 };
+        };
+        const subtract = (p1, p2) => ({ x: p1.x - p2.x, y: p1.y - p2.y });
+        const dot = (v1, v2) => v1.x * v2.x + v1.y * v2.y;
+
+        // Calculates the interior angle formed by three points (A, B, C) where B is the vertex.
+        const calculateAngle = (A, B, C) => {
+            const BA = subtract(A, B);
+            const BC = subtract(C, B);
+
+            const dotProduct = dot(BA, BC);
+            const magBA = Math.sqrt(distSq(A, B));
+            const magBC = Math.sqrt(distSq(C, B));
+
+            if (magBA === 0 || magBC === 0) return 0;
+
+            let angleRad = Math.acos(Math.max(-1, Math.min(1, dotProduct / (magBA * magBC))));
+            return toDegrees(angleRad);
+        };
+
+        // Calculate the position of a point on the circle given an angle (in degrees, 0 is right/East)
+        const getPointOnCircle = (angleDeg) => {
+            const angleRad = toRadians(angleDeg);
+            return {
+                x: O.x + R * Math.cos(angleRad),
+                y: O.y + R * Math.sin(angleRad),
+                isDraggable: true
+            };
+        };
+
+        // Clamps a point to the circle's circumference
+        const clampToCircle = (p) => {
+            const v = subtract(p, O);
+            const v_norm = normalize(v);
+            return {
+                x: O.x + R * v_norm.x,
+                y: O.y + R * v_norm.y
+            };
+        };
+
+        // Drawing Functions
+        const drawLine = (p1, p2, color = '#f97316', width = 2) => {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        };
+
+        const drawCircle = (p, r, color = '#d1d5db', fill = false) => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, r, 0, 2 * Math.PI);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            if (fill) {
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+        };
+
+        const drawPoint = (p, label, color = '#f87171') => {
+            drawCircle(p, POINT_RADIUS, color, true);
+            // Label
+            ctx.fillStyle = '#fefefe';
+            ctx.font = '16px Inter';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            let offsetX = 10;
+            let offsetY = 10;
+            if (p.x < O.x) offsetX = -10;
+            if (p.y > O.y) offsetY = 20;
+            ctx.fillText(label, p.x + offsetX, p.y + offsetY);
+        };
+
+        /**
+         * Draws an angle arc and displays the angle magnitude.
+         */
+        const drawAngleArc = (p1, vertex, p2, radius, color = '#f59e0b') => {
+            const v1 = subtract(p1, vertex);
+            const v2 = subtract(p2, vertex);
+            
+            const angleMagnitude = calculateAngle(p1, vertex, p2);
+
+            // Calculate bisector for label placement (more robust than averaging angles)
+            const v1_norm = normalize(v1);
+            const v2_norm = normalize(v2);
+            const v_bisector = normalize({ x: v1_norm.x + v2_norm.x, y: v1_norm.y + v2_norm.y });
+            const midAngle = Math.atan2(v_bisector.y, v_bisector.x);
+
+            // --- Arc Drawing Logic ---
+            let startAngle = Math.atan2(v1.y, v1.x);
+            let endAngle = Math.atan2(v2.y, v2.x);
+
+            const normalizeAngle = (angle) => (angle + 2 * Math.PI) % (2 * Math.PI);
+            startAngle = normalizeAngle(startAngle);
+            endAngle = normalizeAngle(endAngle);
+
+            let diff = endAngle - startAngle;
+            if (diff < 0) diff += 2 * Math.PI;
+            const isInterior = diff <= Math.PI;
+
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+
+            // Draw the arc for the interior angle (shortest path)
+            ctx.arc(vertex.x, vertex.y, radius, startAngle, endAngle, !isInterior); 
+            ctx.stroke();
+            // -------------------------
+
+            // Draw Angle Label
+            const textRadius = radius + 15;
+            const textX = vertex.x + textRadius * Math.cos(midAngle);
+            const textY = vertex.y + textRadius * Math.sin(midAngle);
+
+            ctx.fillStyle = color;
+            ctx.font = 'bold 14px Inter';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(formatAngle(angleMagnitude), textX, textY);
+        };
+
+        // Theorem Definitions
+        const theorems = [
+            // 0. Key Definitions (New)
+            {
+                title: "0. Key Definitions",
+                description: "Remind yourself of the fundamental terms used in circle theorems.",
+                setup: () => [
+                    { name: 'O', ...O, isDraggable: false },
+                    { name: 'A', ...getPointOnCircle(90), isDraggable: false },
+                    { name: 'B', ...getPointOnCircle(0), isDraggable: false },
+                    { name: 'C', ...getPointOnCircle(180), isDraggable: false },
+                    { name: 'D', ...getPointOnCircle(240), isDraggable: false },
+                    { name: 'E', ...getPointOnCircle(300), isDraggable: false },
+                    { name: 'F', ...getPointOnCircle(120), isDraggable: false },
+                ],
+                draw: () => {
+                    const [O, A, B, C, D, E, F] = points;
+
+                    // Set up canvas text style for definitions
+                    ctx.font = 'bold 16px Inter';
+                    ctx.textAlign = 'left';
+
+                    // 1. Radius OA (Red)
+                    drawLine(O, A, '#f87171', 3);
+                    ctx.fillStyle = '#f87171';
+                    ctx.fillText('Radius', O.x - 20, O.y + R + 30);
+
+                    // 2. Diameter BC (Blue)
+                    drawLine(B, C, '#60a5fa', 3);
+                    ctx.fillStyle = '#60a5fa';
+                    ctx.fillText('Diameter', O.x - R - 60, O.y);
+
+                    // 3. Chord DE (Green)
+                    drawLine(D, E, '#10b981', 3);
+                    ctx.fillStyle = '#10b981';
+                    ctx.fillText('Chord', D.x - 30, D.y + 30);
+
+                    // 4. Arc DE (Yellow, highlight on circumference)
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#facc15';
+                    ctx.lineWidth = 5;
+                    const angleD = Math.atan2(D.y - O.y, D.x - O.x);
+                    const angleE = Math.atan2(E.y - O.y, E.x - O.x);
+                    ctx.arc(O.x, O.y, R, angleE, angleD, true); // Minor arc
+                    ctx.stroke();
+                    ctx.fillStyle = '#facc15';
+                    ctx.fillText('Arc', E.x + 10, E.y - 10);
+
+                    // 5. Tangent (Gray line T'T through F)
+                    const radius_v = subtract(F, O);
+                    const T = { x: F.x - radius_v.y * 15, y: F.y + radius_v.x * 15 };
+                    const T2 = { x: F.x + radius_v.y * 15, y: F.y - radius_v.x * 15 };
+                    drawLine(T, T2, '#9ca3af', 2);
+                    ctx.fillStyle = '#9ca3af';
+                    ctx.fillText('Tangent', T2.x + 10, T2.y);
+
+                    
+                    // Draw all points
+                    points.forEach(p => {
+                        if (p.name !== 'O') drawPoint(p, p.name, '#fefefe');
+                    });
+                    drawPoint(O, 'O', '#fefefe');
+                },
+                results: () => {
+                    return [
+                        `<p class="definition-text">Radius (<span class="text-red-400">OA</span>): A line segment connecting the centre (O) to any point on the circumference.</p>`,
+                        `<p class="definition-text">Diameter (<span class="text-blue-400">BC</span>): A **chord** that passes through the centre (O). It is the longest chord.</p>`,
+                        `<p class="definition-text">Chord (<span class="text-green-400">DE</span>): A straight line segment whose endpoints both lie on the circumference.</p>`,
+                        `<p class="definition-text">Arc (<span class="text-yellow-400">DE</span>): A continuous section of the circumference.</p>`,
+                        `<p class="definition-text">Tangent (<span class="text-gray-400">line through F</span>): A straight line that touches the circle at exactly one point, the point of contact (F).</p>`,
+                    ].map(text => `${text}`);
+                }
+            },
+            // 1. Angles in the Same Segment
+            {
+                title: "1. Angles in the Same Segment",
+                description: "",
+                setup: () => [
+                    { name: 'A', ...getPointOnCircle(30) },
+                    { name: 'B', ...getPointOnCircle(150) },
+                    { name: 'C', ...getPointOnCircle(270) },
+                    { name: 'D', ...getPointOnCircle(300) },
+                ],
+                draw: () => {
+                    const [A, B, C, D] = points;
+                    drawLine(A, B, '#60a5fa', 3); // Chord AB
+                    // Angle ACB (Green)
+                    drawLine(C, A, '#10b981');
+                    drawLine(C, B, '#10b981');
+                    drawAngleArc(A, C, B, 30, '#10b981');
+                    // Angle ADB (Red)
+                    drawLine(D, A, '#f87171');
+                    drawLine(D, B, '#f87171');
+                    drawAngleArc(A, D, B, 30, '#f87171');
+                },
+                results: () => {
+                    const [A, B, C, D] = points;
+                    const angleACB = calculateAngle(A, C, B);
+                    const angleADB = calculateAngle(A, D, B);
+                    return [
+                        `<p class="text-secondary">Angle ACB: ${formatAngle(angleACB)}</p>`,
+                        `<p class="text-secondary">Angle ADB: ${formatAngle(angleADB)}</p>`,
+                        `<p class="definition-text"> Drag points C and D. </p>`,
+                        `<p class="definition-text"> What do you notice? What stays the same? </p>`,
+                        `<p class="definition-text"> Change the position of the chord by dragging points A and B. </p>`,
+                        `<p class="definition-text"> Copy and complete: Angles in the same segment are ___. </p>`,
+                    ].map(text => `${text}`);
+                }
+            },
+            // 2. Angles in a Semi-Circle
+            {
+                title: "2. Angles in a Semi-Circle",
+                description: "",
+                setup: () => [
+                    { name: 'A', ...getPointOnCircle(0), isDraggable: false },    // End 1 of diameter (Fixed)
+                    { name: 'B', ...getPointOnCircle(180), isDraggable: false },  // End 2 of diameter (Fixed)
+                    { name: 'C', ...getPointOnCircle(90), isDraggable: true },   // Vertex on circumference (Movable)
+                    { name: 'O', ...O, isDraggable: false },
+                ],
+                draw: () => {
+                    const [A, B, C, O] = points;
+                    drawLine(A, B, '#4f46e5', 3); // Diameter AB (passes through O)
+                    drawLine(C, A, '#10b981');    // Chord CA
+                    drawLine(C, B, '#10b981');    // Chord CB
+                    // The arc for the right angle (Red)
+                    drawAngleArc(A, C, B, 30, '#f87171');
+                    drawPoint(O, 'O', '#fefefe');
+                },
+                results: () => {
+                    const [A, B, C] = points;
+                    const angleACB = calculateAngle(A, C, B);
+                    return [
+                        `<p class="definition-text"> The blue line is a diameter of the circle. Drag point C to make a new triangle. </p>`,
+                        `<p class="definition-text"> What do you notice about the angle at C?  </p>`,
+                        `<p class="definition-text"> Copy and complete: The angle in a semi-circle is ___ . </p>`,
+                    ];
+                }
+            },
+            // 3. Angle at Centre
+            {
+                title: "3. Angle at Centre",
+                description: "",
+                setup: () => [
+                    { name: 'A', ...getPointOnCircle(30) },
+                    { name: 'B', ...getPointOnCircle(150) },
+                    { name: 'C', ...getPointOnCircle(270) },
+                    { name: 'O', ...O, isDraggable: false },
+                ],
+                draw: () => {
+                    const [A, B, C, O] = points;
+                    // Draw Center Angle (Red)
+                    drawLine(O, A);
+                    drawLine(O, B);
+                    drawAngleArc(A, O, B, 30, '#f87171');
+                    // Draw Circumference Angle (Green)
+                    drawLine(C, A, '#10b981');
+                    drawLine(C, B, '#10b981');
+                    drawAngleArc(A, C, B, 30, '#10b981');
+                    drawPoint(O, 'O', '#fefefe');
+                },
+                results: () => {
+                    const [A, B, C, O] = points;
+                    const centerAngle = calculateAngle(A, O, B);
+                    const circAngle = calculateAngle(A, C, B);
+                    return [
+                        `<p class="text-secondary">Centre AOB: ${formatAngle(centerAngle)}</p>`,
+                        `<p class="text-secondary">Circumference ACB: ${formatAngle(circAngle)}</p>`,
+                        `<p class="definition-text"> Drag points A, B and C. </p>`,
+                        `<p class="definition-text"> What do you notice about the angles formed at the xentre and at the circumference?  </p>`,
+                        `<p class="definition-text"> Copy and complete: The angle at the centre is _____ the angle at the circumference. </p>`,
+                    ];
+                }
+            },
+            // 4. Opposite angles in Cyclic Quadrilateral
+            {
+                title: "4. Cyclic Quadrilateral",
+                description: "A cyclic quadrilateral is a quadraliteral whose vertices are on the circumference of a circle.",
+                setup: () => [
+                    { name: 'A', ...getPointOnCircle(45) },
+                    { name: 'B', ...getPointOnCircle(135) },
+                    { name: 'C', ...getPointOnCircle(225) },
+                    { name: 'D', ...getPointOnCircle(315) },
+                ],
+                draw: () => {
+                    const [A, B, C, D] = points;
+                    // Draw Quadrilateral
+                    drawLine(A, B, '#60a5fa', 2);
+                    drawLine(B, C, '#60a5fa', 2);
+                    drawLine(C, D, '#60a5fa', 2);
+                    drawLine(D, A, '#60a5fa', 2);
+                    // Angle Arcs
+                    drawAngleArc(D, A, B, 15, '#f87171'); // A (Red)
+                    drawAngleArc(A, B, C, 15, '#f59e0b'); // B (Yellow)
+                    drawAngleArc(B, C, D, 15, '#f87171'); // C (Red)
+                    drawAngleArc(C, D, A, 15, '#f59e0b'); // D (Yellow)
+                },
+                results: () => {
+                    const [A, B, C, D] = points;
+                    const angleA = calculateAngle(D, A, B);
+                    const angleC = calculateAngle(B, C, D);
+                    const angleB = calculateAngle(A, B, C);
+                    const angleD = calculateAngle(C, D, A);
+
+                    const sumAC = angleA + angleC;
+                    const sumBD = angleB + angleD;
+
+                    return [
+                        `<p class="text-secondary"> A + C: ${formatAngle(angleA)} + ${formatAngle(angleC)} = ${formatAngle(sumAC)}</p>`,
+                        `<p class="text-secondary"> B + D: ${formatAngle(angleB)} + ${formatAngle(angleD)} = ${formatAngle(sumBD)}</p>`,
+                        `<p class="definition-text"> Drag the vertices A, B, C and D to make new cyclic quadrilaterals.  </p>`,
+                        `<p class="definition-text"> What do you notice about the opposite angles?  </p>`,
+                        `<p class="definition-text"> Copy and complete: The opposite angles in a cyclic quadrilateral add to ___ . </p>`,
+                    ];
+                }
+            },
+            // 5. Tangent meets Radius
+            {
+                title: "5. Tangent meets Radius",
+                description: "The tangent to a circle is ___ to the radius at the point of contact.",
+                setup: () => [
+                    { name: 'A', ...getPointOnCircle(120) }, // Tangency point
+                    { name: 'O', ...O, isDraggable: false },
+                ],
+                draw: () => {
+                    const [A, O] = points;
+
+                    // Calculate Tangent line direction (perpendicular to radius OA)
+                    const radius_v = subtract(A, O);
+                    const T = { x: A.x - radius_v.y * 10, y: A.y + radius_v.x * 10 };
+                    const T2 = { x: A.x + radius_v.y * 10, y: A.y - radius_v.x * 10 };
+
+                    // Draw Tangent (Line TT2 through A)
+                    drawLine(T, T2, '#9ca3af', 1);
+
+                    // Draw Radius OA
+                    drawLine(O, A, '#60a5fa', 2);
+
+                    // A point on the tangent for calculation
+                    const Tprime = T2;
+
+                    // Draw the angle arc and label (Red)
+                    drawAngleArc(O, A, Tprime, 20, '#f87171');
+
+                    drawPoint(O, 'O', '#fefefe');
+                },
+                results: () => {
+                    const [A, O] = points;
+                    const radius_v = subtract(A, O);
+                    const T2 = { x: A.x + radius_v.y * 10, y: A.y - radius_v.x * 10 };
+
+                    // We use a nearby point on the tangent for angle calculation
+                    const P_tangent = { x: A.x + (T2.x - A.x) * 0.1, y: A.y + (T2.y - A.y) * 0.1 };
+                    const angleOAP = calculateAngle(O, A, P_tangent);
+
+                    return [
+                        `<p class="text-secondary">Angle $\\angle OAT'$: ${formatAngle(angleOAP)}</p>`
+                    ];
+                }
+            },
+            // 6. Tangents from an External Point
+            {
+                title: "6. Tangents from an External Point",
+                description: "The lengths of two tangents drawn from an external point to a circle are ___.",
+                setup: () => [
+                    { name: 'P', x: O.x + R + 100, y: O.y + 50, isDraggable: true, isExternal: true },
+                    { name: 'O', ...O, isDraggable: false },
+                    // T1 and T2 will be calculated points of tangency
+                ],
+                draw: () => {
+                    const [P, O] = points;
+
+                    // Calculate distance PO
+                    const dPO = Math.sqrt(distSq(P, O));
+
+                    if (dPO <= R) {
+                        // Point is inside the circle, cannot draw tangents
+                        ctx.fillStyle = '#f87171';
+                        ctx.font = '20px Inter';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('Move point P outside the circle.', O.x, O.y + 10);
+                        return;
+                    }
+
+                    // Calculate angle between OP and radius at tangency (TPO)
+                    const angleTangent = Math.acos(R / dPO);
+                    const anglePO = Math.atan2(P.y - O.y, P.x - O.x);
+
+                    // Angle to T1 and T2 from center O
+                    const angleT1 = anglePO - angleTangent;
+                    const angleT2 = anglePO + angleTangent;
+
+                    // Points of Tangency T1 and T2
+                    const T1 = { x: O.x + R * Math.cos(angleT1), y: O.y + R * Math.sin(angleT1) };
+                    const T2 = { x: O.x + R * Math.cos(angleT2), y: O.y + R * Math.sin(angleT2) };
+
+                    // Draw Tangent Lines (PT1 and PT2)
+                    drawLine(P, T1, '#60a5fa', 3);
+                    drawLine(P, T2, '#60a5fa', 3);
+
+                    // Draw Radii to Tangents (OT1 and OT2) - optional
+                    drawLine(O, T1, '#10b981', 1);
+                    drawLine(O, T2, '#10b981', 1);
+
+                    // Draw Tangency Points
+                    drawPoint(T1, 'T1', '#f87171');
+                    drawPoint(T2, 'T2', '#f87171');
+                },
+                results: () => {
+                    const [P, O] = points;
+                    const dPO = Math.sqrt(distSq(P, O));
+
+                    if (dPO <= R) {
+                        return [`<p class="text-secondary">Point P is inside the circle. No tangents can be drawn.</p>`];
+                    }
+
+                    // Calculate the coordinates of T1 and T2 to measure the lengths
+                    const angleTangent = Math.acos(R / dPO);
+                    const anglePO = Math.atan2(P.y - O.y, P.x - O.x);
+                    const angleT1 = anglePO - angleTangent;
+                    const angleT2 = anglePO + angleTangent;
+                    const T1 = { x: O.x + R * Math.cos(angleT1), y: O.y + R * Math.sin(angleT1) };
+                    const T2 = { x: O.x + R * Math.cos(angleT2), y: O.y + R * Math.sin(angleT2) };
+
+                    const lengthPT1 = Math.sqrt(distSq(P, T1));
+                    const lengthPT2 = Math.sqrt(distSq(P, T2));
+
+                    return [
+                        `<p class="text-secondary">Tangent Length $|PT_1|$: ${formatLength(lengthPT1)}</p>`,
+                        `<p class="text-secondary">Tangent Length $|PT_2|$: ${formatLength(lengthPT2)}</p>`
+                    ];
+                }
+            },
+            // 7. Alternate Segment Theorem
+            {
+                title: "7. Alternate Segment Theorem",
+                description: "The angle between a tangent and a chord through the point of contact is equal to the angle in the ___ segment.",
+                setup: () => [
+                    { name: 'A', ...getPointOnCircle(120) }, // Tangency point
+                    { name: 'B', ...getPointOnCircle(30) },
+                    { name: 'C', ...getPointOnCircle(270) },
+                    { name: 'O', ...O, isDraggable: false },
+                ],
+                draw: () => {
+                    const [A, B, C, O] = points;
+
+                    // Calculate Tangent line direction (perpendicular to radius OA)
+                    const radius_v = subtract(A, O);
+                    const T = { x: A.x - radius_v.y * 10, y: A.y + radius_v.x * 10 };
+                    const T2 = { x: A.x + radius_v.y * 10, y: A.y - radius_v.x * 10 };
+
+                    // Draw Tangent (Line TT2 through A)
+                    drawLine(T, T2, '#9ca3af', 1);
+
+                    // Draw Chord AC
+                    drawLine(A, C, '#60a5fa', 2);
+
+                    // Draw Angle in Alternate Segment (ABC - Green)
+                    drawLine(B, A, '#10b981');
+                    drawLine(B, C, '#10b981');
+                    drawAngleArc(A, B, C, 30, '#10b981');
+
+                    // Draw Angle between Tangent and Chord (T2AC - Red)
+                    drawAngleArc(T2, A, C, 30, '#f87171');
+
+                    drawPoint(O, 'O', '#fefefe');
+                },
+                results: () => {
+                    const [A, B, C, O] = points;
+                    const radius_v = subtract(A, O);
+                    const T2 = { x: A.x + radius_v.y * 10, y: A.y - radius_v.x * 10 };
+
+                    const angleABC = calculateAngle(A, B, C); // Angle in alternate segment
+                    const angleT2AC = calculateAngle(T2, A, C); // Angle between tangent and chord
+
+                    return [
+                        `<p class="text-secondary">Alternate Segment $\\angle ABC$: ${formatAngle(angleABC)}</p>`,
+                        `<p class="text-secondary">Tangent-Chord $\\angle T'AC$: ${formatAngle(angleT2AC)}</p>`
+                    ];
+                }
+            }
+        ];
+
+        // Core Functions
+        const render = () => {
+            // 1. Clear Canvas
+            canvas.width = canvas.width; // Simple way to clear
+
+            // 2. Draw Circle and Center
+            drawCircle(O, R, '#4b5563');
+            ctx.fillStyle = '#fefefe';
+            ctx.font = '16px Inter';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('O', O.x + 10, O.y + 10);
+
+            // 3. Get current theorem and execute drawing/results
+            const theorem = theorems[currentTheorem];
+            theorem.draw();
+
+            // 4. Draw Draggable Points
+            // Only draw draggable points for interactive theorems
+            if (currentTheorem !== 0) {
+                points.forEach(p => {
+                    if (p.isDraggable) {
+                        drawPoint(p, p.name);
+                    }
+                });
+            }
+
+
+            // 5. Update Info Panel
+            theoremTitle.textContent = theorem.title;
+            theoremDescription.textContent = theorem.description;
+            resultDisplay.innerHTML = theorem.results().join('');
+        };
+
+        const setupTheorem = (index) => {
+            currentTheorem = index;
+            points = theorems[index].setup();
+            render();
+        };
+
+        // Event Handlers for Dragging
+        const getCanvasMousePos = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            let x, y;
+
+            if (e.touches && e.touches.length > 0) {
+                // Handle touch event
+                x = e.touches[0].clientX - rect.left;
+                y = e.touches[0].clientY - rect.top;
+            } else {
+                // Handle mouse event
+                x = e.clientX - rect.left;
+                y = e.clientY - rect.top;
+            }
+
+            return { x, y };
+        };
+
+        const onStart = (e) => {
+            // Disable dragging for the Definitions section (currentTheorem === 0)
+            if (currentTheorem === 0) return;
+
+            e.preventDefault();
+            const pos = getCanvasMousePos(e);
+
+            // Check if distance squared is less than DRAG_THRESHOLD_SQ (400, or 20px radius)
+            draggedPoint = points.find(p => p.isDraggable && distSq(p, pos) < DRAG_THRESHOLD_SQ);
+
+            if (draggedPoint) {
+                isDragging = true;
+                canvas.style.cursor = 'grabbing';
+            }
+        };
+
+        const onMove = (e) => {
+            if (!isDragging || !draggedPoint) return;
+            e.preventDefault();
+            const pos = getCanvasMousePos(e);
+
+            if (draggedPoint.isExternal) {
+                // For external point (Theorem 6), just update its position
+                draggedPoint.x = pos.x;
+                draggedPoint.y = pos.y;
+            } else {
+                // For points on the circumference (most theorems), clamp to the circle
+                const clamped = clampToCircle(pos);
+                draggedPoint.x = clamped.x;
+                draggedPoint.y = clamped.y;
+            }
+
+            render();
+        };
+
+        const onEnd = () => {
+            isDragging = false;
+            draggedPoint = null;
+            canvas.style.cursor = 'default';
+        };
+
+        // Initialize UI and Events
+        const initialize = () => {
+            // Create theorem selection buttons
+            theorems.forEach((t, index) => {
+                const button = document.createElement('button');
+                // Use a different color for the definition button
+                const isDefinition = index === 0;
+                const baseClass = isDefinition 
+                    ? 'bg-blue-900 hover:bg-blue-700' 
+                    : 'bg-gray-700 hover:bg-primary';
+
+                button.className = `p-2 rounded-lg font-semibold transition-all shadow-md text-sm text-center text-white
+                                    ${baseClass}
+                                    focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-gray-900`;
+                
+                // Add the correct prefix (0, 1, 2, ...)
+                button.textContent = `${t.title}`;
+                
+                button.onclick = () => {
+                    // Update active button styling
+                    document.querySelectorAll('#theorem-selector button').forEach((btn, i) => {
+                        const btnIsDefinition = i === 0;
+                        btn.classList.remove('bg-primary', 'bg-blue-700');
+                        if (btnIsDefinition) {
+                            btn.classList.add('bg-blue-900', 'hover:bg-blue-700');
+                        } else {
+                            btn.classList.add('bg-gray-700', 'hover:bg-primary');
+                        }
+                    });
+                    
+                    if (isDefinition) {
+                        button.classList.add('bg-blue-700');
+                        button.classList.remove('bg-blue-900', 'hover:bg-blue-700');
+                    } else {
+                        button.classList.add('bg-primary');
+                        button.classList.remove('bg-gray-700', 'hover:bg-primary');
+                    }
+                    
+                    setupTheorem(index);
+                };
+                selector.appendChild(button);
+            });
+
+            // Initial setup (select the first theorem)
+            document.querySelector('#theorem-selector button').click();
+
+            // Mouse and Touch Listeners
+            canvas.addEventListener('mousedown', onStart);
+            canvas.addEventListener('mousemove', onMove);
+            canvas.addEventListener('mouseup', onEnd);
+            canvas.addEventListener('mouseleave', onEnd); // Stop dragging if mouse leaves canvas
+
+            canvas.addEventListener('touchstart', onStart, { passive: false });
+            canvas.addEventListener('touchmove', onMove, { passive: false });
+            canvas.addEventListener('touchend', onEnd);
+            canvas.addEventListener('touchcancel', onEnd);
+        };
+
+        // Start the application
+        initialize();
+    </script>
+</body>
+</html>
