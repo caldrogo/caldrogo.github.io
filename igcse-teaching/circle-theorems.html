@@ -396,7 +396,7 @@
                         `<p class="text-secondary">Centre AOB: ${formatAngle(centerAngle)}</p>`,
                         `<p class="text-secondary">Circumference ACB: ${formatAngle(circAngle)}</p>`,
                         `<p class="definition-text"> Drag points A, B and C. </p>`,
-                        `<p class="definition-text"> What do you notice about the angles formed at the xentre and at the circumference?  </p>`,
+                        `<p class="definition-text"> What do you notice about the angles formed at the centre and at the circumference?  </p>`,
                         `<p class="definition-text"> Copy and complete: The angle at the centre is _____ the angle at the circumference. </p>`,
                     ];
                 }
@@ -483,7 +483,7 @@
                     const angleOAP = calculateAngle(O, A, P_tangent);
 
                     return [
-                        `<p class="text-secondary">Angle $\\angle OAT'$: ${formatAngle(angleOAP)}</p>`
+                        `<p class="text-secondary">Angle at A: ${formatAngle(angleOAP)}</p>`
                     ];
                 }
             },
@@ -555,8 +555,8 @@
                     const lengthPT2 = Math.sqrt(distSq(P, T2));
 
                     return [
-                        `<p class="text-secondary">Tangent Length $|PT_1|$: ${formatLength(lengthPT1)}</p>`,
-                        `<p class="text-secondary">Tangent Length $|PT_2|$: ${formatLength(lengthPT2)}</p>`
+                        `<p class="text-secondary">Tangent Length |PT1|: ${formatLength(lengthPT1)}</p>`,
+                        `<p class="text-secondary">Tangent Length |PT2|: ${formatLength(lengthPT2)}</p>`
                     ];
                 }
             },
@@ -590,21 +590,23 @@
                     drawAngleArc(A, B, C, 30, '#10b981');
 
                     // Draw Angle between Tangent and Chord (T2AC - Red)
-                    drawAngleArc(T2, A, C, 30, '#f87171');
+                    drawAngleArc(T, A, C, 30, '#f87171');
+
 
                     drawPoint(O, 'O', '#fefefe');
                 },
                 results: () => {
                     const [A, B, C, O] = points;
                     const radius_v = subtract(A, O);
+                    const T = { x: A.x - radius_v.y * 10, y: A.y + radius_v.x * 10 };
                     const T2 = { x: A.x + radius_v.y * 10, y: A.y - radius_v.x * 10 };
 
                     const angleABC = calculateAngle(A, B, C); // Angle in alternate segment
-                    const angleT2AC = calculateAngle(T2, A, C); // Angle between tangent and chord
+                    const angleTAC = calculateAngle(T, A, C); // Angle between tangent and chord
 
                     return [
-                        `<p class="text-secondary">Alternate Segment $\\angle ABC$: ${formatAngle(angleABC)}</p>`,
-                        `<p class="text-secondary">Tangent-Chord $\\angle T'AC$: ${formatAngle(angleT2AC)}</p>`
+                        `<p class="text-secondary">Alternate Segment angle ABC: ${formatAngle(angleABC)}</p>`,
+                        `<p class="text-secondary">Angle at tangent: ${formatAngle(angleTAC)}</p>`
                     ];
                 }
             }
